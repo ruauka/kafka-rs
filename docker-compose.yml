@@ -1,0 +1,58 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.1
+    hostname: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    hostname: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Мы объявляем два типа листенеров: PLAINTEXT (для внутренней сети) и PLAINTEXT_HOST (для внешней).
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      # PLAINTEXT://kafka:29092 - Для клиентов внутри Docker-сети
+      # PLAINTEXT_HOST://localhost:9092 - Для клиентов снаружи Docker-сети (Go-скрипт)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+  akhq:  # <- UI для Kafka
+    image: tchiotludo/akhq
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            docker-kafka:
+              properties:
+                bootstrap.servers: "kafka:29092"
+          ui:
+            refresh-interval: 5s    # Интервал обновления (5 секунд)
+            topic:
+              data:
+                size: 50           # Количество сообщений при загрузке
+                poll-timeout: 1000 # Таймаут опроса (мс)
+
+  # kafdrop:  # <- UI для Kafka
+  #   image: obsidiandynamics/kafdrop
+  #   depends_on:
+  #     - kafka
+  #   ports:
+  #     - "9000:9000"
+  #   environment:
+  #     KAFKA_BROKERCONNECT: "kafka:29092"
+  #     JVM_OPTS: "-Xms32M -Xmx64M"
+  #     SERVER_SERVLET_CONTEXT_PATH: "/"
